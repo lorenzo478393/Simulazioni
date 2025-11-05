@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MRU — Strada cartoon + Timeline centrata</title>
+<title>MRU — Strada cartoon + Timeline centrata (bordo protetto)</title>
 <style>
   :root{ --bg1:#e9eef5; --bg2:#dbe6f3; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --blue:#2563eb; --orange:#f97316; }
   *{box-sizing:border-box}
@@ -27,13 +27,13 @@
 </head>
 <body>
   <header>
-    <h1>MRU — Auto cartoon al centro, strada in movimento • Timeline orizzontale</h1>
-    <div style="font-size:.9rem;color:#334155">v>0 vista da dietro • v<0 vista da davanti • punto del grafico fisso al centro</div>
+    <h1>MRU — Auto cartoon centrale, strada in movimento • Timeline orizzontale</h1>
+    <div style="font-size:.9rem;color:#334155">v>0 vista da dietro • v<0 vista da davanti • punto del grafico fisso al centro • bordo protetto</div>
   </header>
 
   <section class="layout">
     <div class="card" style="position:relative">
-      <div class="legend">La strada scorre in funzione di v. Freccia arancione ∝ |v| e verso di v.</div>
+      <div class="legend">La strada scorre in funzione di v. Niente freccia; vista cambia col segno di v.</div>
       <canvas id="scene" class="scene"></canvas>
       <div class="controls">
         <div class="ctrl"><label for="vel">Velocità (m/s)</label><input id="vel" type="range" min="-40" max="40" step="1" value="18"><strong id="velVal">18</strong></div>
@@ -46,7 +46,7 @@
     </div>
 
     <div class="card" style="position:relative">
-      <div class="legend">Grafico s–t con timeline: il punto resta al centro; finestra orizzontale fissa.</div>
+      <div class="legend">Grafico s–t centrato (timeline). Bordi di sicurezza in alto/basso e a sinistra/destra.</div>
       <canvas id="graph" class="graph"></canvas>
     </div>
   </section>
@@ -110,8 +110,6 @@
     ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx-roadTopW/2,horizon); ctx.lineTo(cx-roadBotW/2,h); ctx.moveTo(cx+roadTopW/2,horizon); ctx.lineTo(cx+roadBotW/2,h); ctx.stroke();
 
     // segnaletica centrale che scorre (direzione opposta al moto percepito)
-    // v>0 (avanti): segnaletica "viene verso di noi" quindi si muove verso il basso → offset cresce
-    // v<0 (indietro): offset decresce
     laneOffset = (laneOffset + (v * dt * pxPerMeter)) % (dashLen + dashGap);
     const steps = 22;
     for(let i=0;i<steps;i++){
@@ -123,110 +121,121 @@
     }
 
     // AUTO cartoon al centro (vista cambia con segno di v)
-    const frontView = v < 0; const carX = cx, carY = h*0.78, carW = 140, carH = 56;
+    const frontView = v < 0; const carX = cx, carY = h*0.78, carW = 150, carH = 60;
     // ombra
     ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(carX, carY+carH*0.55, carW*0.55, carH*0.35, 0, 0, Math.PI*2); ctx.fill();
 
     ctx.save(); ctx.translate(carX,carY); if(frontView) ctx.scale(-1,1);
     // carrozzeria base
     ctx.fillStyle = '#2563eb'; ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(-carW/2, -carH/2, carW, carH, 12); ctx.fill(); ctx.stroke();
-    // tettuccio arrotondato
-    ctx.fillStyle = '#1e40af'; ctx.beginPath(); ctx.roundRect(-carW*0.32, -carH*0.78, carW*0.64, carH*0.36, 12); ctx.fill();
-    // parabrezza/lunotto ampio
-    ctx.fillStyle = '#93c5fd'; ctx.beginPath(); ctx.roundRect(-carW*0.28, -carH*0.62, carW*0.56, carH*0.34, 10); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-carW/2, -carH/2, carW, carH, 14); ctx.fill(); ctx.stroke();
+    // TETTUCCIO a larghezza piena (stile cartoon)
+    ctx.fillStyle = '#1e40af';
+    ctx.beginPath();
+    ctx.roundRect(-carW/2, -carH*0.85, carW, carH*0.45, 14);
+    ctx.fill();
+    // VETRI ampi (parabrezza/lunotto) a larghezza piena
+    ctx.fillStyle = '#93c5fd';
+    ctx.beginPath(); ctx.roundRect(-carW/2 + 10, -carH*0.70, carW - 20, carH*0.34, 10); ctx.fill();
+    // linea centrale del vetro (divisione)
+    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -carH*0.68); ctx.lineTo(0, -carH*0.36); ctx.stroke();
     // dettagli frontali/posteriori
     if(frontView){
       // griglia + fari
       ctx.fillStyle = '#0f172a'; ctx.fillRect(-carW*0.22, carH*0.02, carW*0.44, 7);
-      ctx.fillStyle = '#fde68a'; ctx.fillRect(-carW/2+10, -6, 16, 12); ctx.fillRect(carW/2-26, -6, 16, 12);
+      ctx.fillStyle = '#fde68a'; ctx.fillRect(-carW/2+12, -4, 18, 12); ctx.fillRect(carW/2-30, -4, 18, 12);
     } else {
-      // targa + luci
-      ctx.fillStyle = '#e2e8f0'; ctx.fillRect(-18, 6, 36, 8);
-      ctx.fillStyle = '#ef4444'; ctx.fillRect(-carW/2+10, carH*0.1, 16, 12); ctx.fillRect(carW/2-26, carH*0.1, 16, 12);
+      // targa + luci rosse
+      ctx.fillStyle = '#e2e8f0'; ctx.fillRect(-20, 6, 40, 8);
+      ctx.fillStyle = '#ef4444'; ctx.fillRect(-carW/2+12, carH*0.1, 18, 12); ctx.fillRect(carW/2-30, carH*0.1, 18, 12);
     }
     ctx.restore();
-
-    // freccia velocità sopra l'auto
-    const arrowLen = Math.max(12, Math.min(180, Math.abs(v)*4)) * Math.sign(v||1);
-    ctx.strokeStyle = varGet('--orange','#f97316'); ctx.lineWidth = 5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(carX, carY - carH*1.05); ctx.lineTo(carX + arrowLen, carY - carH*1.05); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(carX + arrowLen, carY - carH*1.05);
-    ctx.lineTo(carX + arrowLen - 12*Math.sign(arrowLen||1), carY - carH*1.05 - 7);
-    ctx.lineTo(carX + arrowLen - 12*Math.sign(arrowLen||1), carY - carH*1.05 + 7); ctx.closePath(); ctx.fillStyle = '#f97316'; ctx.fill();
   }
 
-  function varGet(name, fallback){
-    const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return s || fallback;
-  }
-
-  // ===== GRAFICO: PUNTO CENTRALE FISSO + TIMELINE ORIZZONTALE =====
+  // ===== GRAFICO: PUNTO CENTRALE FISSO + TIMELINE + BORDO PROTETTO =====
   const halfWindow = 10; // secondi a sinistra e destra del punto centrale
 
   function drawGraph(){
     const w = graph.clientWidth, h = graph.clientHeight; gtx.clearRect(0,0,w,h);
 
+    // padding interno fisso in px ("bordo" richiesto)
+    const padL = 48, padR = 16, padT = 16, padB = 32;
+    const innerW = w - (padL + padR);
+    const innerH = h - (padT + padB);
+
     // fondo e riquadro
     gtx.fillStyle = '#ffffff'; gtx.fillRect(0,0,w,h);
-    gtx.strokeStyle = '#cbd5e1'; gtx.lineWidth = 1.5; gtx.strokeRect(48,16,w-64,h-48);
+    gtx.strokeStyle = '#cbd5e1'; gtx.lineWidth = 1.5; gtx.strokeRect(padL, padT, innerW, innerH);
 
-    // Mappa centrata: punto al centro
+    // finestra temporale centrata
     const tCenter = t;
     const tMin = Math.max(0, tCenter - halfWindow);
     const tMax = tCenter + halfWindow;
 
-    // scala verticale: ZERO IN BASSO, s cresce verso l'alto
+    // calcolo range verticale dinamico che SEGUE la discesa e mantiene MARGINI PIXEL intorno al pallino
     const windowPoints = points.filter(p => p.t >= tMin && p.t <= tMax);
-    const sMax = Math.max(10, ...windowPoints.map(p=>p.s), s); // garantisci headroom
-    const sMin = 0; // vincolato per avere 0 in basso
+    const minWin = windowPoints.length ? Math.min(...windowPoints.map(p=>p.s), s) : Math.min(0, s);
+    const maxWin = windowPoints.length ? Math.max(...windowPoints.map(p=>p.s), s) : Math.max(10, s);
 
-    const innerW = w - 64, innerH = h - 64;
-    const Xc = 48 + innerW/2; // centro fisico del grafico (punto fisso)
+    // padding verticale in metri: proporzionale al range + minimo assoluto
+    const baseRange = Math.max(1, maxWin - minWin);
+    let sMin = Math.max(0, minWin - (0.12*baseRange + 2));
+    let sMax = maxWin + (0.12*baseRange + 2);
 
-    const tx = (tt)=> 48 + ((tt - (tCenter - halfWindow)) / (2*halfWindow)) * innerW;
-    const sy = (ss)=> h-32 - ((ss - sMin) / (Math.max(1e-6, sMax - sMin))) * innerH;
+    // assicurati che il PALLINO (s) non sia mai a meno di 30px dai bordi alto/basso
+    const minPixPad = 30;
+    const toY = (ss)=> h - padB - ((ss - sMin) / Math.max(1e-6, (sMax - sMin))) * innerH;
+    let Yc = toY(s);
+    if (Yc < padT + minPixPad) {
+      // troppo vicino al top → estendi sMax
+      const pixShort = (padT + minPixPad) - Yc;
+      const addS = (pixShort / innerH) * (sMax - sMin);
+      sMax += addS; Yc = toY(s);
+    }
+    if (Yc > h - padB - minPixPad) {
+      // troppo vicino al bottom → estendi sMin (senza scendere sotto 0)
+      const pixShort = Yc - (h - padB - minPixPad);
+      const addS = (pixShort / innerH) * (sMax - sMin);
+      sMin = Math.max(0, sMin - addS); Yc = toY(s);
+    }
 
-    // Griglia TIMELINE: linee verticali ogni 1 s che scorrono (in base a tCenter)
+    const tx = (tt)=> padL + ((tt - (tCenter - halfWindow)) / (2*halfWindow)) * innerW;
+    const sy = (ss)=> h - padB - ((ss - sMin) / Math.max(1e-6, (sMax - sMin))) * innerH;
+
+    // Griglia TIMELINE: linee verticali che scorrono (1 s)
     gtx.strokeStyle = '#e5e7eb'; gtx.lineWidth = 1; gtx.setLineDash([6,6]);
     const firstTick = Math.ceil(tMin);
     for(let ttick = firstTick; ttick <= tMax; ttick += 1){
-      const x = tx(ttick); gtx.beginPath(); gtx.moveTo(x,16); gtx.lineTo(x,h-32); gtx.stroke();
+      const x = tx(ttick); gtx.beginPath(); gtx.moveTo(x, padT); gtx.lineTo(x, h - padB); gtx.stroke();
     }
     gtx.setLineDash([]);
 
-    // Assi con etichette coerenti
+    // Assi
     gtx.strokeStyle = '#94a3b8'; gtx.lineWidth = 1.5;
-    gtx.beginPath(); gtx.moveTo(48, h-32); gtx.lineTo(w-16, h-32); gtx.moveTo(48, h-32); gtx.lineTo(48, 16); gtx.stroke();
+    gtx.beginPath(); gtx.moveTo(padL, h - padB); gtx.lineTo(w - padR, h - padB); gtx.moveTo(padL, h - padB); gtx.lineTo(padL, padT); gtx.stroke();
 
     // Etichette
     gtx.fillStyle = '#0f172a'; gtx.font = '12px Inter, system-ui, sans-serif';
     gtx.fillText('Tempo (s)', w/2-28, h-10);
     gtx.save(); gtx.translate(18, h/2+28); gtx.rotate(-Math.PI/2); gtx.fillText('Spazio (m)', 0, 0); gtx.restore();
 
-    // Curva s–t (storia)
+    // Curva s–t (storia) con bordo protetto
     gtx.strokeStyle = '#2563eb'; gtx.lineWidth = 2; gtx.beginPath();
     let moved=false;
     for(const p of points){ if(p.t < tMin || p.t > tMax) continue; const X=tx(p.t), Y=sy(p.s); if(!moved){ gtx.moveTo(X,Y); moved=true; } else { gtx.lineTo(X,Y); } }
     if(moved) gtx.stroke();
 
     // Punto centrale — fisso in X, alla quota di s attuale
-    const Yc = sy(s);
-    gtx.fillStyle = '#2563eb'; gtx.beginPath(); gtx.arc(Xc, Yc, 5, 0, Math.PI*2); gtx.fill();
+    const Xc = padL + innerW/2; const Ycc = sy(s);
+    gtx.fillStyle = '#2563eb'; gtx.beginPath(); gtx.arc(Xc, Ycc, 5, 0, Math.PI*2); gtx.fill();
 
     // Crocette incrociate
-    gtx.strokeStyle = '#94a3b8'; gtx.setLineDash([6,6]); gtx.beginPath(); gtx.moveTo(48, Yc); gtx.lineTo(w-16, Yc); gtx.moveTo(Xc, 16); gtx.lineTo(Xc, h-32); gtx.stroke(); gtx.setLineDash([]);
+    gtx.strokeStyle = '#94a3b8'; gtx.setLineDash([6,6]); gtx.beginPath(); gtx.moveTo(padL, Ycc); gtx.lineTo(w - padR, Ycc); gtx.moveTo(Xc, padT); gtx.lineTo(Xc, h - padB); gtx.stroke(); gtx.setLineDash([]);
 
-    // Ticks numerici in basso e a sinistra
+    // Ticks numerici
     gtx.fillStyle = '#334155'; gtx.font = '11px Inter, system-ui, sans-serif';
-    const xticks = 6;
-    for(let i=0;i<=xticks;i++){
-      const tt = tMin + i*(tMax - tMin)/xticks; const x = tx(tt); gtx.fillText(tt.toFixed(0), x-8, h-12);
-    }
-    const yticks = 5;
-    for(let i=0;i<=yticks;i++){
-      const ss = sMin + i*(sMax - sMin)/yticks; const y = sy(ss); gtx.fillText(ss.toFixed(0), 6, y+4);
-    }
+    const xticks = 6; for(let i=0;i<=xticks;i++){ const tt = tMin + i*(tMax - tMin)/xticks; const x = tx(tt); gtx.fillText(tt.toFixed(0), x-8, h-12); }
+    const yticks = 5; for(let i=0;i<=yticks;i++){ const ss = sMin + i*(sMax - sMin)/yticks; const y = sy(ss); gtx.fillText(ss.toFixed(0), 6, y+4); }
   }
 
   // ===== LOOP =====
@@ -235,7 +244,7 @@
     resize(scene); resize(graph);
     const rawdt = (now - last)/1000; last = now; const dt = Math.min(0.05, rawdt) * (playing ? 1 : 0);
 
-    // Integrazione MRU (storia conservata); s parte da 0
+    // Integrazione MRU
     t += dt; s += v * dt;
 
     // registra storia (50 Hz)
