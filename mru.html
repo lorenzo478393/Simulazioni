@@ -3,11 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MRU — Visuale centrata + Auto migliorata</title>
+<title>MRU — Strada cartoon + Timeline centrata</title>
 <style>
-  :root{
-    --bg1:#e9eef5; --bg2:#dbe6f3; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --blue:#2563eb; --orange:#f97316;
-  }
+  :root{ --bg1:#e9eef5; --bg2:#dbe6f3; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --blue:#2563eb; --orange:#f97316; }
   *{box-sizing:border-box}
   body{margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:linear-gradient(180deg,var(--bg1),var(--bg2)); color:var(--ink); padding:1rem;}
   header{display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:8px}
@@ -20,7 +18,7 @@
   .graph{aspect-ratio:16/9}
   .controls{display:flex; flex-wrap:wrap; gap:.8rem; align-items:center; margin-top:.6rem}
   .ctrl{background:var(--panel); padding:.65rem .9rem; border-radius:12px; box-shadow:0 6px 16px rgba(15,23,42,.06); display:flex; align-items:center; gap:.5rem}
-  input[type=range]{width:220px}
+  input[type=range]{width:260px}
   .btn{border:0; background:var(--blue); color:#fff; padding:.6rem .9rem; border-radius:10px; font-weight:700; cursor:pointer}
   .btn.secondary{background:#0f172a}
   .pill{background:#0ea5e9; color:#fff; padding:.35rem .7rem; border-radius:999px; font-weight:700; display:inline-block; margin-right:.4rem}
@@ -29,13 +27,13 @@
 </head>
 <body>
   <header>
-    <h1>MRU — Punto centrato e auto migliorata</h1>
-    <div style="font-size:.9rem;color:#334155">Il punto nel grafico resta al centro. L'auto ha tettuccio e finestrino migliorati.</div>
+    <h1>MRU — Auto cartoon al centro, strada in movimento • Timeline orizzontale</h1>
+    <div style="font-size:.9rem;color:#334155">v>0 vista da dietro • v<0 vista da davanti • punto del grafico fisso al centro</div>
   </header>
 
   <section class="layout">
     <div class="card" style="position:relative">
-      <div class="legend">v > 0: vista da dietro • v < 0: vista da davanti</div>
+      <div class="legend">La strada scorre in funzione di v. Freccia arancione ∝ |v| e verso di v.</div>
       <canvas id="scene" class="scene"></canvas>
       <div class="controls">
         <div class="ctrl"><label for="vel">Velocità (m/s)</label><input id="vel" type="range" min="-40" max="40" step="1" value="18"><strong id="velVal">18</strong></div>
@@ -48,13 +46,14 @@
     </div>
 
     <div class="card" style="position:relative">
-      <div class="legend">Grafico centrato: il punto rimane fisso al centro, gli assi si espandono</div>
+      <div class="legend">Grafico s–t con timeline: il punto resta al centro; finestra orizzontale fissa.</div>
       <canvas id="graph" class="graph"></canvas>
     </div>
   </section>
 
 <script>
 (function(){
+  // ===== DOM & CTX =====
   const scene = document.getElementById('scene');
   const graph = document.getElementById('graph');
   const ctx = scene.getContext('2d');
@@ -67,81 +66,191 @@
   const kpiS = document.getElementById('kpiS');
   const kpiV = document.getElementById('kpiV');
 
-  let v = Number(velR.value);
-  let t = 0;
-  let s = 0;
+  // ===== STATE =====
+  let v = Number(velR.value); // m/s
+  let t = 0;                  // s
+  let s = 0;                  // m (accumulata)
   let playing = true;
-  const points = [];
+  const points = [];          // storia {t,s}
 
-  velR.addEventListener('input',()=>{v=Number(velR.value);velVal.textContent=v;kpiV.textContent=`v = ${v} m/s`;});
-  btnPP.addEventListener('click',()=>{playing=!playing;btnPP.textContent=playing?'Pausa':'Riprendi';});
-  btnReset.addEventListener('click',()=>{t=0;s=0;points.length=0;});
+  // ===== UI =====
+  velR.addEventListener('input',()=>{ v = Number(velR.value); velVal.textContent = v.toFixed(0); kpiV.textContent = `v = ${v.toFixed(0)} m/s`; });
+  btnPP.addEventListener('click',()=>{ playing = !playing; btnPP.textContent = playing ? 'Pausa' : 'Riprendi'; });
+  btnReset.addEventListener('click',()=>{ t=0; s=0; points.length=0; });
 
-  function drawScene(){
-    const w=scene.clientWidth,h=scene.clientHeight;ctx.clearRect(0,0,w,h);
-    const cx=w/2;const cy=h*0.78;const carW=120,carH=50;const front=v<0;
+  // ===== DPI-AWARE RESIZE =====
+  function resize(canvas){
+    const w = canvas.clientWidth, h = canvas.clientHeight; const dpr = devicePixelRatio || 1;
+    if(canvas.width !== Math.floor(w*dpr) || canvas.height !== Math.floor(h*dpr)){
+      canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr);
+      const c = canvas.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+    }
+  }
+  const ro = new ResizeObserver(()=>{ resize(scene); resize(graph); });
+  ro.observe(scene); ro.observe(graph);
 
-    // sfondo
-    const sky=ctx.createLinearGradient(0,0,0,h*0.6);sky.addColorStop(0,'#cfe3ff');sky.addColorStop(1,'#f2f7ff');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
-    ctx.fillStyle='#3b414a';ctx.fillRect(0,h*0.6,w,h*0.4);
+  // ===== SCENA: AUTO CARTOON CENTRALE, STRADA IN MOVIMENTO =====
+  let laneOffset = 0;           // scorrimento segnaletica
+  const pxPerMeter = 6;         // scala per la strada
+  const dashLen = 36, dashGap = 44;
 
-    // auto con tettuccio
-    ctx.save();
-    ctx.translate(cx,cy);
-    if(front) ctx.scale(-1,1);
-    ctx.fillStyle='#2563eb';ctx.beginPath();ctx.roundRect(-carW/2,-carH/2,carW,carH,10);ctx.fill();
-    // tettuccio
-    ctx.fillStyle='#1e40af';ctx.fillRect(-carW*0.25,-carH*0.65,carW*0.5,carH*0.3);
-    // finestrino
-    ctx.fillStyle='#93c5fd';ctx.fillRect(-carW*0.2,-carH*0.55,carW*0.4,carH*0.25);
-    // fari o luci
-    if(front){ctx.fillStyle='#fde68a';ctx.fillRect(-carW/2+8,-carH*0.15,14,10);ctx.fillRect(carW/2-22,-carH*0.15,14,10);}else{ctx.fillStyle='#ef4444';ctx.fillRect(-carW/2+8,carH*0.05,14,10);ctx.fillRect(carW/2-22,carH*0.05,14,10);}
+  function drawScene(dt){
+    const w = scene.clientWidth, h = scene.clientHeight; ctx.clearRect(0,0,w,h);
+
+    // cielo diurno
+    const sky = ctx.createLinearGradient(0,0,0,h*0.6); sky.addColorStop(0,'#cfe3ff'); sky.addColorStop(1,'#f2f7ff'); ctx.fillStyle = sky; ctx.fillRect(0,0,w,h);
+
+    // colline
+    ctx.fillStyle = '#bcd1e6'; ctx.beginPath(); ctx.moveTo(0,h*0.55); for(let x=0;x<=w;x+=40){ ctx.lineTo(x, h*0.55 + Math.sin(x*0.008)*12); } ctx.lineTo(w,0); ctx.lineTo(0,0); ctx.closePath(); ctx.fill();
+
+    // strada prospettica
+    const horizon = h*0.62; const roadTopW = w*0.25, roadBotW = w*0.92; const cx=w/2;
+    ctx.fillStyle = '#3b414a'; ctx.beginPath(); ctx.moveTo(cx-roadTopW/2,horizon); ctx.lineTo(cx+roadTopW/2,horizon); ctx.lineTo(cx+roadBotW/2,h); ctx.lineTo(cx-roadBotW/2,h); ctx.closePath(); ctx.fill();
+    // bordi
+    ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx-roadTopW/2,horizon); ctx.lineTo(cx-roadBotW/2,h); ctx.moveTo(cx+roadTopW/2,horizon); ctx.lineTo(cx+roadBotW/2,h); ctx.stroke();
+
+    // segnaletica centrale che scorre (direzione opposta al moto percepito)
+    // v>0 (avanti): segnaletica "viene verso di noi" quindi si muove verso il basso → offset cresce
+    // v<0 (indietro): offset decresce
+    laneOffset = (laneOffset + (v * dt * pxPerMeter)) % (dashLen + dashGap);
+    const steps = 22;
+    for(let i=0;i<steps;i++){
+      const p = i/steps; const y1 = horizon + p*(h-horizon); const y2 = horizon + (p + dashLen/(h-horizon))*(h-horizon);
+      const yShift = (laneOffset % (dashLen+dashGap)) * ((1-p)*0.25 + 0.75);
+      const yy1 = y1 + yShift; const yy2 = y2 + yShift; if(yy1>h) continue;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, ((roadTopW+(roadBotW-roadTopW)*p)*0.01));
+      ctx.beginPath(); ctx.moveTo(cx,yy1); ctx.lineTo(cx,yy2); ctx.stroke();
+    }
+
+    // AUTO cartoon al centro (vista cambia con segno di v)
+    const frontView = v < 0; const carX = cx, carY = h*0.78, carW = 140, carH = 56;
+    // ombra
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(carX, carY+carH*0.55, carW*0.55, carH*0.35, 0, 0, Math.PI*2); ctx.fill();
+
+    ctx.save(); ctx.translate(carX,carY); if(frontView) ctx.scale(-1,1);
+    // carrozzeria base
+    ctx.fillStyle = '#2563eb'; ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-carW/2, -carH/2, carW, carH, 12); ctx.fill(); ctx.stroke();
+    // tettuccio arrotondato
+    ctx.fillStyle = '#1e40af'; ctx.beginPath(); ctx.roundRect(-carW*0.32, -carH*0.78, carW*0.64, carH*0.36, 12); ctx.fill();
+    // parabrezza/lunotto ampio
+    ctx.fillStyle = '#93c5fd'; ctx.beginPath(); ctx.roundRect(-carW*0.28, -carH*0.62, carW*0.56, carH*0.34, 10); ctx.fill();
+    // dettagli frontali/posteriori
+    if(frontView){
+      // griglia + fari
+      ctx.fillStyle = '#0f172a'; ctx.fillRect(-carW*0.22, carH*0.02, carW*0.44, 7);
+      ctx.fillStyle = '#fde68a'; ctx.fillRect(-carW/2+10, -6, 16, 12); ctx.fillRect(carW/2-26, -6, 16, 12);
+    } else {
+      // targa + luci
+      ctx.fillStyle = '#e2e8f0'; ctx.fillRect(-18, 6, 36, 8);
+      ctx.fillStyle = '#ef4444'; ctx.fillRect(-carW/2+10, carH*0.1, 16, 12); ctx.fillRect(carW/2-26, carH*0.1, 16, 12);
+    }
     ctx.restore();
 
-    // freccia velocità
-    ctx.strokeStyle='#f97316';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(cx,cy-carH*1.1);ctx.lineTo(cx+v*3,cy-carH*1.1);ctx.stroke();
+    // freccia velocità sopra l'auto
+    const arrowLen = Math.max(12, Math.min(180, Math.abs(v)*4)) * Math.sign(v||1);
+    ctx.strokeStyle = varGet('--orange','#f97316'); ctx.lineWidth = 5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(carX, carY - carH*1.05); ctx.lineTo(carX + arrowLen, carY - carH*1.05); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(carX + arrowLen, carY - carH*1.05);
+    ctx.lineTo(carX + arrowLen - 12*Math.sign(arrowLen||1), carY - carH*1.05 - 7);
+    ctx.lineTo(carX + arrowLen - 12*Math.sign(arrowLen||1), carY - carH*1.05 + 7); ctx.closePath(); ctx.fillStyle = '#f97316'; ctx.fill();
   }
+
+  function varGet(name, fallback){
+    const s = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return s || fallback;
+  }
+
+  // ===== GRAFICO: PUNTO CENTRALE FISSO + TIMELINE ORIZZONTALE =====
+  const halfWindow = 10; // secondi a sinistra e destra del punto centrale
 
   function drawGraph(){
-    const w=graph.clientWidth,h=graph.clientHeight;gtx.clearRect(0,0,w,h);
-    gtx.fillStyle='#fff';gtx.fillRect(0,0,w,h);
-    gtx.strokeStyle='#cbd5e1';gtx.lineWidth=1.5;gtx.strokeRect(48,16,w-64,h-48);
+    const w = graph.clientWidth, h = graph.clientHeight; gtx.clearRect(0,0,w,h);
 
-    // centro punto fisso, finestra che si muove
-    const halfWindow=10; // secondi prima e dopo il punto centrale
-    const tMin=Math.max(0,t-halfWindow);
-    const tMax=t+halfWindow;
+    // fondo e riquadro
+    gtx.fillStyle = '#ffffff'; gtx.fillRect(0,0,w,h);
+    gtx.strokeStyle = '#cbd5e1'; gtx.lineWidth = 1.5; gtx.strokeRect(48,16,w-64,h-48);
 
-    // y parte da 0 in basso e cresce verso l'alto
-    const sVals=points.filter(p=>p.t>=tMin&&p.t<=tMax).map(p=>p.s);
-    const sMax=Math.max(0,...sVals,10);
-    const sMin=0;
+    // Mappa centrata: punto al centro
+    const tCenter = t;
+    const tMin = Math.max(0, tCenter - halfWindow);
+    const tMax = tCenter + halfWindow;
 
-    const tx=tt=>48+((tt-tMin)/(tMax-tMin))*(w-64);
-    const sy=ss=>h-32-((ss-sMin)/(sMax-sMin||1))*(h-64);
+    // scala verticale: ZERO IN BASSO, s cresce verso l'alto
+    const windowPoints = points.filter(p => p.t >= tMin && p.t <= tMax);
+    const sMax = Math.max(10, ...windowPoints.map(p=>p.s), s); // garantisci headroom
+    const sMin = 0; // vincolato per avere 0 in basso
 
-    // assi
-    gtx.strokeStyle='#aaa';gtx.beginPath();gtx.moveTo(50,h-30);gtx.lineTo(w-20,h-30);gtx.moveTo(50,h-30);gtx.lineTo(50,20);gtx.stroke();
+    const innerW = w - 64, innerH = h - 64;
+    const Xc = 48 + innerW/2; // centro fisico del grafico (punto fisso)
 
-    // curva
-    gtx.strokeStyle='#2563eb';gtx.lineWidth=2;gtx.beginPath();
-    let started=false;
-    for(const p of points){if(p.t<tMin||p.t>tMax)continue;const X=tx(p.t),Y=sy(p.s);if(!started){gtx.moveTo(X,Y);started=true;}else{gtx.lineTo(X,Y);}}
-    gtx.stroke();
+    const tx = (tt)=> 48 + ((tt - (tCenter - halfWindow)) / (2*halfWindow)) * innerW;
+    const sy = (ss)=> h-32 - ((ss - sMin) / (Math.max(1e-6, sMax - sMin))) * innerH;
 
-    // punto corrente centrato
-    const Xc=tx(t),Yc=sy(s);gtx.fillStyle='#2563eb';gtx.beginPath();gtx.arc(Xc,Yc,4,0,Math.PI*2);gtx.fill();
-    gtx.strokeStyle='#94a3b8';gtx.setLineDash([6,6]);gtx.beginPath();gtx.moveTo(48,Yc);gtx.lineTo(w-16,Yc);gtx.moveTo(Xc,16);gtx.lineTo(Xc,h-32);gtx.stroke();gtx.setLineDash([]);
+    // Griglia TIMELINE: linee verticali ogni 1 s che scorrono (in base a tCenter)
+    gtx.strokeStyle = '#e5e7eb'; gtx.lineWidth = 1; gtx.setLineDash([6,6]);
+    const firstTick = Math.ceil(tMin);
+    for(let ttick = firstTick; ttick <= tMax; ttick += 1){
+      const x = tx(ttick); gtx.beginPath(); gtx.moveTo(x,16); gtx.lineTo(x,h-32); gtx.stroke();
+    }
+    gtx.setLineDash([]);
+
+    // Assi con etichette coerenti
+    gtx.strokeStyle = '#94a3b8'; gtx.lineWidth = 1.5;
+    gtx.beginPath(); gtx.moveTo(48, h-32); gtx.lineTo(w-16, h-32); gtx.moveTo(48, h-32); gtx.lineTo(48, 16); gtx.stroke();
+
+    // Etichette
+    gtx.fillStyle = '#0f172a'; gtx.font = '12px Inter, system-ui, sans-serif';
+    gtx.fillText('Tempo (s)', w/2-28, h-10);
+    gtx.save(); gtx.translate(18, h/2+28); gtx.rotate(-Math.PI/2); gtx.fillText('Spazio (m)', 0, 0); gtx.restore();
+
+    // Curva s–t (storia)
+    gtx.strokeStyle = '#2563eb'; gtx.lineWidth = 2; gtx.beginPath();
+    let moved=false;
+    for(const p of points){ if(p.t < tMin || p.t > tMax) continue; const X=tx(p.t), Y=sy(p.s); if(!moved){ gtx.moveTo(X,Y); moved=true; } else { gtx.lineTo(X,Y); } }
+    if(moved) gtx.stroke();
+
+    // Punto centrale — fisso in X, alla quota di s attuale
+    const Yc = sy(s);
+    gtx.fillStyle = '#2563eb'; gtx.beginPath(); gtx.arc(Xc, Yc, 5, 0, Math.PI*2); gtx.fill();
+
+    // Crocette incrociate
+    gtx.strokeStyle = '#94a3b8'; gtx.setLineDash([6,6]); gtx.beginPath(); gtx.moveTo(48, Yc); gtx.lineTo(w-16, Yc); gtx.moveTo(Xc, 16); gtx.lineTo(Xc, h-32); gtx.stroke(); gtx.setLineDash([]);
+
+    // Ticks numerici in basso e a sinistra
+    gtx.fillStyle = '#334155'; gtx.font = '11px Inter, system-ui, sans-serif';
+    const xticks = 6;
+    for(let i=0;i<=xticks;i++){
+      const tt = tMin + i*(tMax - tMin)/xticks; const x = tx(tt); gtx.fillText(tt.toFixed(0), x-8, h-12);
+    }
+    const yticks = 5;
+    for(let i=0;i<=yticks;i++){
+      const ss = sMin + i*(sMax - sMin)/yticks; const y = sy(ss); gtx.fillText(ss.toFixed(0), 6, y+4);
+    }
   }
 
-  let last=performance.now();
-  function loop(now){
-    const dt=(now-last)/1000;last=now;if(playing){t+=dt;s+=v*dt;}
-    if(points.length===0||t-points[points.length-1].t>=0.02){points.push({t,s});if(points.length>5000)points.splice(0,1000);}
-    kpiT.textContent=`t = ${t.toFixed(1)} s`;kpiS.textContent=`s = ${s.toFixed(1)} m`;
-    drawScene();drawGraph();requestAnimationFrame(loop);
+  // ===== LOOP =====
+  let last = performance.now();
+  function frame(now){
+    resize(scene); resize(graph);
+    const rawdt = (now - last)/1000; last = now; const dt = Math.min(0.05, rawdt) * (playing ? 1 : 0);
+
+    // Integrazione MRU (storia conservata); s parte da 0
+    t += dt; s += v * dt;
+
+    // registra storia (50 Hz)
+    if(points.length===0 || t - points[points.length-1].t >= 0.02){ points.push({t, s}); if(points.length>6000) points.splice(0,1500); }
+
+    // KPI
+    kpiT.textContent = `t = ${t.toFixed(1)} s`; kpiS.textContent = `s = ${s.toFixed(1)} m`;
+
+    // Draw
+    drawScene(dt);
+    drawGraph();
+
+    requestAnimationFrame(frame);
   }
-  requestAnimationFrame(loop);
+  requestAnimationFrame(frame);
 })();
 </script>
 </body>
