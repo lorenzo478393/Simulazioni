@@ -337,10 +337,16 @@ function drawRight(p){
 
   /* FOLLOW-CAM: stabile, senza “zoom” */
   if (proj) {
-    const vxLead = proj.vx * 0.25;            // look-ahead moderato
-    const vyLead = proj.vy * 0.12;
-    const targetX = proj.x + 6 + vxLead;
-    const targetY = Math.max(groundY + 4, proj.y + vyLead);
+// sposta la visuale un po' a sinistra → il proiettile resta più a destra dello schermo
+const vxLead = proj.vx * 0.25;
+const vyLead = proj.vy * 0.12;
+
+// offset negativo = la camera guarda "più avanti" verso destra
+const horizontalOffset = -20; // metri verso sinistra
+
+const targetX = proj.x + 6 + vxLead + horizontalOffset;
+const targetY = Math.max(groundY + 4, proj.y + vyLead);
+
     const k = 1 - Math.exp(-CAM_LAMBDA * frameDt);
     camX += (targetX - camX) * k;
     camY += (targetY - camY) * k;
