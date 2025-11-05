@@ -137,16 +137,25 @@ function layoutPanels(){
   leftPanel  = {x:pad, y:pad, w:panelW, h:panelH};
   rightPanel = {x:pad+panelW+gap, y:pad, w:panelW, h:panelH};
 
-  // adatta scala panoramica in base alla portata attuale (o massima finora)
-  let maxRange = 80; // default
+  // 🔹 nuova logica di zoom panoramica:
+  // trova la gittata più grande fra tutti i colpi e ingrandisci la vista
+  let maxRange = 60; // default minimo in metri
   for(const s of shots){
-    if(s._R) maxRange = Math.max(maxRange, s._R*1.1);
+    if(s._R) maxRange = Math.max(maxRange, s._R);
   }
-  if (proj && proj._R) maxRange = Math.max(maxRange, proj._R*1.1);
+  if (proj && proj._R) maxRange = Math.max(maxRange, proj._R);
 
-  ppmLeft = clamp(Math.floor(leftPanel.w / Math.max(40, maxRange)), 10, 40);
-  ppmRight = clamp(Math.floor(rightPanel.w / 50), 18, 42); // zoom comodo per follow
+  // 🔸 aggiungi un margine del 20% e forza a non superare certe scale
+  maxRange *= 1.2; 
+
+  // 🔸 scala in pixel per metro: più piccolo = più "zoom-out"
+  // per rendere la parabola sempre completamente visibile
+  ppmLeft = clamp(Math.floor(leftPanel.w / maxRange), 6, 28);
+
+  // la vista ravvicinata resta uguale
+  ppmRight = clamp(Math.floor(rightPanel.w / 50), 18, 42);
 }
+
 
 // =================== Coordinate world→screen ===================
 // Panoramica: origine in basso a sinistra, ground a ~65% altezza
