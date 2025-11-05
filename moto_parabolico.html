@@ -152,8 +152,8 @@ function worldToScreenRight(xm,ym){
 
 // montagne più estese
 function generateHills(){
-  hillsFar=[];hillsNear=[];
-  const Wm=600,spacing=12;
+  hillsFar=[]; hillsNear=[];
+  const Wm=1200, spacing=12;
   for(let x=0;x<=Wm;x+=spacing){
     const y=10+4*Math.sin(x*0.03)+2*Math.sin(x*0.11+1.2)+1.5*Math.sin(x*0.05-0.7);
     hillsFar.push({x,y});
@@ -163,6 +163,7 @@ function generateHills(){
     hillsNear.push({x,y});
   }
 }
+
 
 // fisica dinamica
 function newProjectile(v0,theta){
@@ -251,22 +252,27 @@ btnFire.onclick=()=>{if(proj&&proj.alive)return;const v0=parseFloat(inputPower.v
 btnPause.onclick=()=>{paused=!paused;btnPause.textContent=paused?'Riprendi':'Pausa';};
 btnReset.onclick=()=>{proj=null;currentTrail=[];shots.length=0;camX=6;camY=5;tflightEl.textContent=hmaxEl.textContent=rangeEl.textContent='0.00';leftPanX=0;leftPanY=0;leftZoom=0.35;layoutPanels();};
 
-// === Zoom centrato sulla vista ===
 function applyZoomScale(newZoom){
-  newZoom=clamp(newZoom,0.05,5);
-  const prevZoom=leftZoom;if(newZoom===prevZoom)return;
-  // centro in pixel
-  const centerX=leftPanel.x+leftPanel.w/2;
-  const centerY=leftPanel.y+leftPanel.h/2;
-  const marginL=40;
-  const pyGround=leftPanel.y+Math.round(leftPanel.h*0.7);
-  // centro mondo prima
-  const worldX=centerX;const worldY=centerY;
-  const worldXc=leftPanX+(centerX-(leftPanel.x+marginL))/ppmLeft;
-  const worldYc=groundY+(pyGround-centerY)/ppmLeft-leftPanY;
-  leftZoom=newZoom;layoutPanels();
-  leftPanX=worldXc-(centerX-(leftPanel.x+marginL))/ppmLeft;
-  leftPanY=groundY+(pyGround-centerY)/ppmLeft-worldYc;
+  // permetti zoom-out molto più profondo
+  newZoom = clamp(newZoom, 0.02, 5);  // prima era 0.05
+  const prevZoom = leftZoom;
+  if(newZoom === prevZoom) return;
+
+  const centerX = leftPanel.x + leftPanel.w / 2;
+  const centerY = leftPanel.y + leftPanel.h / 2;
+  const marginL = 40;
+  const pyGround = leftPanel.y + Math.round(leftPanel.h * 0.7);
+
+  // punto del mondo attualmente al centro della vista
+  const worldXc = leftPanX + (centerX - (leftPanel.x + marginL)) / ppmLeft;
+  const worldYc = groundY + (pyGround - centerY) / ppmLeft - leftPanY;
+
+  leftZoom = newZoom;
+  layoutPanels();
+
+  // mantieni lo stesso centro mondo al centro dello schermo
+  leftPanX = worldXc - (centerX - (leftPanel.x + marginL)) / ppmLeft;
+  leftPanY = groundY + (pyGround - centerY) / ppmLeft - worldYc;
 }
 btnZoomIn.onclick=()=>applyZoomScale(leftZoom*ZOOM_STEP);
 btnZoomOut.onclick=()=>applyZoomScale(leftZoom/ZOOM_STEP);
