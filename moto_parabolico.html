@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Moto parabolico — Campo montano (Pan & Zoom realistico)</title>
+<title>Moto parabolico — Campo montano (Pan & Zoom OK)</title>
 <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
 <style>
   :root{
     --bg:#f3f7fb; --card:#ffffff; --muted:#667085; --accent:#0b84ff; --accent2:#ff8c42;
-    --ctl:#eef2f6; --ctl-border:#d9dee6; --btn:#2d3748; --skyTop:#9fd3ff; --skyMid:#bfe7ff; --skyBot:#e9f6ff;
+    --ctl:#eef2f6; --ctl-border:#d9dee6; --btn:#2d3748;
+    --skyTop:#9fd3ff; --skyMid:#bfe7ff; --skyBot:#e9f6ff;
     --mountainFar:#7fa3b8; --mountainNear:#5f8b9e; --grass:#7cc36b; --soil:#5b7a4f; --trail:#ffb703;
   }
   body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:#102a43;}
@@ -60,13 +61,11 @@
       <span class="stat">Hmax: <span id="hmax">0.00</span> m</span>
       <span class="stat">Portata: <span id="range">0.00</span> m</span>
     </div>
-    <div class="ctrl" style="margin-left:auto">
-      <span class="small">g = 9.81 m/s² · aria trascurata</span>
-    </div>
   </div>
 </div>
 
 <script>
+/* ======= Stato e costanti ======= */
 const holder=document.getElementById('holder');
 const inputPower=document.getElementById('power');
 const inputAngle=document.getElementById('angle');
@@ -91,18 +90,19 @@ let proj=null,currentTrail=[],shots=[];
 let hillsFar=[],hillsNear=[],groundY=0;
 let camX=0,camY=5,CAM_LERP=0.12;
 
-// camera sinistra
-let leftZoom=0.35;
-let leftPanX=0,leftPanY=0;
+// Camera (sinistra)
+let leftZoom=0.3;                 // scala “ampia” iniziale
+let leftPanX=0,leftPanY=0;        // in METRI
 const ZOOM_STEP=1.15;
 const PAN_STEP_M=5;
 
+/* ======= Utilità ======= */
 function deg2rad(d){return d*Math.PI/180;}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 function lerp(a,b,t){return a+(b-a)*t;}
 function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v);}
 
-// fisica
+/* ======= Fisica ======= */
 function theory(v0,theta){
   const tflight=2*v0*Math.sin(theta)/g;
   const Hmax=(v0*v0*Math.sin(theta)**2)/(2*g);
@@ -110,7 +110,7 @@ function theory(v0,theta){
   return {tflight,Hmax,R};
 }
 
-// layout
+/* ======= Layout pannelli e scale ======= */
 function layoutPanels(){
   const gap=12,pad=12;
   const usableW=holder.getBoundingClientRect().width||W;
@@ -121,20 +121,23 @@ function layoutPanels(){
   leftPanel={x:pad,y:pad,w:panelW,h:panelH};
   rightPanel={x:pad+panelW+gap,y:pad,w:panelW,h:panelH};
 
+  // scala sinistra in funzione della portata e dello zoom
   let maxRange=60;
   for(const s of shots){if(s._R)maxRange=Math.max(maxRange,s._R);}
   if(proj&&proj._R)maxRange=Math.max(maxRange,proj._R);
   const targetRange=Math.max(40,maxRange)*1.3;
-  const basePPM=clamp(Math.floor(leftPanel.w/targetRange),6,28);
-  ppmLeft=clamp(Math.floor(basePPM*leftZoom),2,120);
+  const basePPM=clamp(Math.floor(leftPanel.w/targetRange),4,28);
+  ppmLeft=clamp(Math.floor(basePPM*leftZoom),1,240); // consenti pp/m molto piccoli per zoom-out profondo
+
+  // destra (costante semplice)
   ppmRight=clamp(Math.floor(rightPanel.w/50),18,42);
 }
 
-// clip
-function beginPanelClip(p,pan,r=10){const c=p.drawingContext;c.save();c.beginPath();c.roundRect(pan.x,pan.y,pan.w,pan.h,r);c.clip();}
-function endPanelClip(p){p.drawingContext.restore();}
+/* ======= Clip helper ======= */
+function beginClip(p,pan){const c=p.drawingContext;c.save();c.beginPath();c.roundRect(pan.x,pan.y,pan.w,pan.h,10);c.clip();}
+function endClip(p){p.drawingContext.restore();}
 
-// world→screen
+/* ======= Mappe coordinate ======= */
 function worldToScreenLeft(xm,ym){
   const marginL=40;
   const pyGround=leftPanel.y+Math.round(leftPanel.h*0.7);
@@ -150,10 +153,10 @@ function worldToScreenRight(xm,ym){
   return {x:px,y:py};
 }
 
-// montagne più estese
+/* ======= Scenario (montagne estese) ======= */
 function generateHills(){
-  hillsFar=[]; hillsNear=[];
-  const Wm=1200, spacing=12;
+  hillsFar=[];hillsNear=[];
+  const Wm=1200,spacing=12;
   for(let x=0;x<=Wm;x+=spacing){
     const y=10+4*Math.sin(x*0.03)+2*Math.sin(x*0.11+1.2)+1.5*Math.sin(x*0.05-0.7);
     hillsFar.push({x,y});
@@ -164,10 +167,9 @@ function generateHills(){
   }
 }
 
-
-// fisica dinamica
+/* ======= Dinamica ======= */
 function newProjectile(v0,theta){
-  const vx=v0*Math.cos(theta),vy=v0*Math.sin(theta);
+  const vx=v0*Math.cos(theta), vy=v0*Math.sin(theta);
   const th=theory(v0,theta);
   proj={x:0,y:0,vx,vy,t:0,alive:true,_R:th.R,_T:th.tflight,_H:th.Hmax};
   currentTrail=[{x:0,y:0}];
@@ -177,12 +179,12 @@ function newProjectile(v0,theta){
 }
 function stepPhysics(dt){
   if(!proj||!proj.alive)return;
-  proj.t+=dt;proj.vy-=g*dt;proj.x+=proj.vx*dt;proj.y+=proj.vy*dt;
+  proj.t+=dt; proj.vy-=g*dt; proj.x+=proj.vx*dt; proj.y+=proj.vy*dt;
   if(proj.y<=groundY){proj.y=groundY;proj.alive=false;shots.push(Object.assign(currentTrail.slice(),{_R:proj._R}));}
   else currentTrail.push({x:proj.x,y:proj.y});
 }
 
-// disegni base
+/* ======= Disegno base ======= */
 function drawSkyGrad(p,X,Y,Wp,Hp){
   const t1=p.color(getCSS('--skyTop')),t2=p.color(getCSS('--skyMid')),t3=p.color(getCSS('--skyBot'));
   for(let i=0;i<Hp;i++){const t=i/(Hp-1);const c=t<.5?p.lerpColor(t1,t2,t*2):p.lerpColor(t2,t3,(t-.5)*2);p.stroke(c);p.line(X,Y+i,X+Wp,Y+i);}
@@ -190,16 +192,17 @@ function drawSkyGrad(p,X,Y,Wp,Hp){
 function drawGround(p,py,X,Wp){p.noStroke();p.fill(getCSS('--grass'));p.rect(X,py,Wp,999);p.fill(getCSS('--soil'));p.rect(X,py+40,Wp,999);}
 function drawProjectile(p,px,py){p.noStroke();p.fill(255,165,0,200);p.circle(px,py,14);p.fill(255,200,80,120);p.circle(px,py,26);}
 
-// panoramica sinistra
+/* ======= Pannello SINISTRO ======= */
 function drawLeft(p){
   const X=leftPanel.x,Y=leftPanel.y,Wp=leftPanel.w,Hp=leftPanel.h;
+  p.push();p.noStroke();p.fill('#fff');p.rect(X,Y,Wp,Hp,10);
+  beginClip(p,leftPanel);
+
+  // Pan verticale: muove tutta la scena (montagne, terreno, cannone, traiettorie)
   p.push();
-  p.noStroke();p.fill('#fff');p.rect(X,Y,Wp,Hp,10);
-  beginPanelClip(p,leftPanel,10);
-  // camera: pan e zoom
-  p.push();
-  p.translate(0,leftPanY*ppmLeft);
-  drawSkyGrad(p,X,Y-600,Wp,Hp+1200);
+  p.translate(0, leftPanY * ppmLeft);
+
+  drawSkyGrad(p,X,Y-1200,Wp,Hp+2400);
 
   p.fill(getCSS('--mountainFar'));p.beginShape();p.vertex(X,Y+Hp);
   for(const h of hillsFar){const s=worldToScreenLeft(h.x,h.y+8);p.vertex(s.x,s.y);}p.vertex(X+Wp,Y+Hp);p.endShape();
@@ -216,75 +219,120 @@ function drawLeft(p){
   if(currentTrail.length){p.noFill();p.stroke('#ff7f11');p.strokeWeight(2.2);p.beginShape();
     for(const pt of currentTrail){const s=worldToScreenLeft(pt.x,pt.y);p.vertex(s.x,s.y);}p.endShape();}
   if(proj){const s=worldToScreenLeft(proj.x,proj.y);drawProjectile(p,s.x,s.y);}
-  p.pop();endPanelClip(p);
-  p.fill('#0b253a');p.noStroke();p.textSize(13);p.text('Panoramica',X+10,Y+18);p.pop();
+
+  p.pop(); // fine translate camera
+  endClip(p);
+  p.fill('#0b253a');p.noStroke();p.textSize(13);p.text('Panoramica',X+10,Y+18);
+  p.pop();
 }
-function drawCannonPanorama(p,g){
+function drawCannonPanorama(p,groundLine){
   const base=worldToScreenLeft(0,groundY),ang=parseFloat(inputAngle.value);
-  p.push();p.translate(base.x,g);p.noStroke();p.fill(70);p.rect(-16,-12,34,20,6);
+  p.push();p.translate(base.x,groundLine);p.noStroke();p.fill(70);p.rect(-16,-12,34,20,6);
   p.push();p.translate(0,-8);p.rotate(-deg2rad(ang));p.fill(60);p.rect(0,-7,50,14,7);p.pop();p.pop();
 }
 
-// follow-cam destra (invariato)
-function drawRight(p){/* come nel file precedente */}
+/* ======= Pannello DESTRO (follow-cam) ======= */
+function drawRight(p){
+  const X=rightPanel.x,Y=rightPanel.y,Wp=rightPanel.w,Hp=rightPanel.h;
+  p.push();p.noStroke();p.fill('#fff');p.rect(X,Y,Wp,Hp,10);
+  beginClip(p,rightPanel);
 
-// main p5
+  if(proj){camX=lerp(camX,proj.x+6,CAM_LERP);camY=lerp(camY,Math.max(groundY+4,proj.y),CAM_LERP);}
+
+  drawSkyGrad(p,X,Y,Wp,Hp);
+
+  p.fill(getCSS('--mountainFar'));p.beginShape();p.vertex(X,Y+Hp);
+  for(const h of hillsFar){const xm=h.x+(camX*0.2);const s=worldToScreenRight(xm,h.y+8);p.vertex(s.x,s.y);}p.vertex(X+Wp,Y+Hp);p.endShape();
+
+  p.fill(getCSS('--mountainNear'));p.beginShape();p.vertex(X,Y+Hp);
+  for(const h of hillsNear){const xm=h.x+(camX*0.4);const s=worldToScreenRight(xm,h.y+4);p.vertex(s.x,s.y);}p.vertex(X+Wp,Y+Hp);p.endShape();
+
+  const gScr=worldToScreenRight(0,groundY);drawGround(p,gScr.y,X,Wp);
+  const cannonS=worldToScreenRight(0,groundY);drawCannonFollow(p,cannonS.x,cannonS.y);
+
+  p.noFill();p.stroke(getCSS('--trail'));p.strokeWeight(2.2);
+  for(const poly of shots){p.beginShape();for(const pt of poly){const s=worldToScreenRight(pt.x,pt.y);p.vertex(s.x,s.y);}p.endShape();}
+  if(currentTrail.length){p.noFill();p.stroke('#ff7f11');p.strokeWeight(2.2);p.beginShape();
+    for(const pt of currentTrail){const s=worldToScreenRight(pt.x,pt.y);p.vertex(s.x,s.y);}p.endShape();}
+  if(proj){const s=worldToScreenRight(proj.x,proj.y);drawProjectile(p,s.x,s.y);}
+
+  endClip(p);
+  p.fill('#0b253a');p.noStroke();p.textSize(13);p.text('Follow-cam',X+10,Y+18);
+  p.pop();
+}
+function drawCannonFollow(p,cx,cy){
+  const ang=parseFloat(inputAngle.value);
+  p.push();p.translate(cx,cy);p.noStroke();p.fill(70);p.rect(-16,-12,34,20,6);
+  p.push();p.translate(0,-8);p.rotate(-deg2rad(ang));p.fill(60);p.rect(0,-7,50,14,7);p.pop();p.pop();
+}
+
+/* ======= p5: setup/draw ======= */
 new p5(p=>{
   p.setup=()=>{
     const b=holder.getBoundingClientRect();
     const cnv=p.createCanvas(Math.max(720,Math.min(1200,Math.floor(b.width))),540);
     cnv.parent(holder);
-    layoutPanels();generateHills();lastMs=p.millis();p.frameRate(60);
+    layoutPanels();
+    generateHills();
+    lastMs=p.millis();
+    p.frameRate(60);
   };
   p.windowResized=()=>{layoutPanels();p.resizeCanvas(W,H);};
   p.draw=()=>{
     const now=p.millis();let dt=(now-(lastMs??now))/1000;lastMs=now;dt=Math.min(dt,0.05);
     if(!paused)stepPhysics(dt);
     p.clear(0,0,0,0);
-    drawLeft(p);drawRight(p);
+    drawLeft(p);
+    drawRight(p);
   };
 });
 
-// UI
-inputPower.oninput=()=>{labelPower.textContent=`${inputPower.value} m/s`;const v0=parseFloat(inputPower.value);const th=theory(v0,deg2rad(parseFloat(inputAngle.value)));proj&&(proj._R=th.R);layoutPanels();};
-inputAngle.oninput=()=>{labelAngle.textContent=`${inputAngle.value}°`;const v0=parseFloat(inputPower.value);const th=theory(v0,deg2rad(parseFloat(inputAngle.value)));proj&&(proj._R=th.R);layoutPanels();};
-btnFire.onclick=()=>{if(proj&&proj.alive)return;const v0=parseFloat(inputPower.value);newProjectile(v0,deg2rad(parseFloat(inputAngle.value)));layoutPanels();};
+/* ======= UI ======= */
+inputPower.oninput=()=>{labelPower.textContent=`${inputPower.value} m/s`;const v0=+inputPower.value;const th=theory(v0,deg2rad(+inputAngle.value));proj&&(proj._R=th.R);layoutPanels();};
+inputAngle.oninput=()=>{labelAngle.textContent=`${inputAngle.value}°`;const v0=+inputPower.value;const th=theory(v0,deg2rad(+inputAngle.value));proj&&(proj._R=th.R);layoutPanels();};
+
+btnFire.onclick=()=>{if(proj&&proj.alive)return;const v0=+inputPower.value;newProjectile(v0,deg2rad(+inputAngle.value));layoutPanels();};
 btnPause.onclick=()=>{paused=!paused;btnPause.textContent=paused?'Riprendi':'Pausa';};
-btnReset.onclick=()=>{proj=null;currentTrail=[];shots.length=0;camX=6;camY=5;tflightEl.textContent=hmaxEl.textContent=rangeEl.textContent='0.00';leftPanX=0;leftPanY=0;leftZoom=0.35;layoutPanels();};
+btnReset.onclick=()=>{proj=null;currentTrail=[];shots.length=0;camX=6;camY=5;tflightEl.textContent=hmaxEl.textContent=rangeEl.textContent='0.00';leftPanX=0;leftPanY=0;leftZoom=0.3;layoutPanels();};
 
+/* ======= Zoom centrato sulla vista (IN/OUT reali) ======= */
 function applyZoomScale(newZoom){
-  // permetti zoom-out molto più profondo
-  newZoom = clamp(newZoom, 0.02, 5);  // prima era 0.05
-  const prevZoom = leftZoom;
-  if(newZoom === prevZoom) return;
+  newZoom=clamp(newZoom,0.02,5);             // zoom-out molto profondo consentito
+  const prevZoom=leftZoom;
+  if(newZoom===prevZoom) return;
 
-  const centerX = leftPanel.x + leftPanel.w / 2;
-  const centerY = leftPanel.y + leftPanel.h / 2;
-  const marginL = 40;
-  const pyGround = leftPanel.y + Math.round(leftPanel.h * 0.7);
+  // Centro schermo (pixel)
+  const centerX=leftPanel.x+leftPanel.w/2;
+  const centerY=leftPanel.y+leftPanel.h/2;
 
-  // punto del mondo attualmente al centro della vista
+  const marginL=40;
+  const pyGround=leftPanel.y+Math.round(leftPanel.h*0.7);
+
+  // Punto del mondo attualmente al centro (prima dello zoom)
   const worldXc = leftPanX + (centerX - (leftPanel.x + marginL)) / ppmLeft;
-  const worldYc = groundY + (pyGround - centerY) / ppmLeft - leftPanY;
+  // Inversa di: screenY = pyGround - (worldY - groundY)*ppmLeft + leftPanY*ppmLeft
+  const worldYc = groundY + (pyGround - centerY)/ppmLeft + leftPanY;
 
-  leftZoom = newZoom;
-  layoutPanels();
+  // Applica nuova scala
+  leftZoom=newZoom;
+  layoutPanels(); // aggiorna ppmLeft in base a leftZoom
 
-  // mantieni lo stesso centro mondo al centro dello schermo
+  // Ricalcola pan per mantenere il medesimo punto mondo al centro
   leftPanX = worldXc - (centerX - (leftPanel.x + marginL)) / ppmLeft;
-  leftPanY = groundY + (pyGround - centerY) / ppmLeft - worldYc;
+  leftPanY = worldYc - groundY + (centerY - pyGround) / ppmLeft;
 }
-btnZoomIn.onclick=()=>applyZoomScale(leftZoom*ZOOM_STEP);
-btnZoomOut.onclick=()=>applyZoomScale(leftZoom/ZOOM_STEP);
-btnZoomReset.onclick=()=>{leftPanX=0;leftPanY=0;leftZoom=0.35;layoutPanels();};
 
-// pan frecce
+btnZoomIn.onclick = ()=>applyZoomScale(leftZoom*ZOOM_STEP);
+btnZoomOut.onclick= ()=>applyZoomScale(leftZoom/ZOOM_STEP);
+btnZoomReset.onclick=()=>{leftPanX=0;leftPanY=0;leftZoom=0.3;layoutPanels();};
+
+/* ======= Pan con frecce (in METRI) ======= */
 window.addEventListener('keydown',e=>{
   const s=PAN_STEP_M;
   if(e.key==='ArrowLeft'){leftPanX-=s;layoutPanels();e.preventDefault();}
   if(e.key==='ArrowRight'){leftPanX+=s;layoutPanels();e.preventDefault();}
-  if(e.key==='ArrowUp'){leftPanY+=s;layoutPanels();e.preventDefault();}
-  if(e.key==='ArrowDown'){leftPanY-=s;layoutPanels();e.preventDefault();}
+  if(e.key==='ArrowUp'){leftPanY+=s;layoutPanels();e.preventDefault();}    // SU → scena giù
+  if(e.key==='ArrowDown'){leftPanY-=s;layoutPanels();e.preventDefault();}  // GIÙ → scena su
 });
 </script>
 </body>
